@@ -63,7 +63,6 @@
 │   ├── manifest.json        # Манифест расширения
 │   ├── background.js        # Управление сетевым мостом и состоянием ретраев
 │   └── content.js           # Взаимодействие со страницей Gemini
-├── examples/                # Примеры созданных модулей, игр и тестов
 ├── agent_gui.py             # Tkinter GUI + локальный HTTP API сервер
 ├── start.bat                # Скрипт запуска агента в один клик для Windows
 ├── requirements.txt         # Базовые зависимости
