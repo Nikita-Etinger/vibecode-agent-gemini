@@ -25,7 +25,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (msg.action === "EXECUTE_PAYLOAD" && loopState.active) {
+  if (msg.action === "EXECUTE_PAYLOAD") {
+    loopState.active = true;
+    loopState.retries = 0;
     loopState.tabId = sender.tab ? sender.tab.id : loopState.tabId;
     executeWithAgent(msg.raw_text);
   }

@@ -1,5 +1,51 @@
 let isLoopRunning = false;
 
+  function updateButtonAppearance(wrapper) {
+    if (wrapper.dataset.agentDecorated === 'true') return;
+    wrapper.dataset.agentDecorated = 'true';
+
+    wrapper.setAttribute('arialabel', 'Агент');
+    wrapper.setAttribute('gemtooltip', 'Агент');
+
+    const btn = wrapper.querySelector('button') || wrapper;
+    btn.setAttribute('aria-label', 'Агент');
+    btn.title = 'Агент';
+
+    const icon = wrapper.querySelector('mat-icon');
+    if (icon) {
+      icon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:block;"><path d="M8 5v14l11-7z"/></svg>`;
+      icon.style.color = '#a594fd';
+    }
+  }
+
+  function decorateAllButtons() {
+    const downloadContainers = document.querySelectorAll('.download-button, [fonticonname="arrow_circle_down"], [arialabel="Скачать код"], [gemtooltip="Скачать код"]');
+    downloadContainers.forEach(updateButtonAppearance);
+  }
+
+  document.addEventListener('click', (e) => {
+    const target = e.target;
+    const trigger = target.closest('.download-button, [fonticonname="arrow_circle_down"], [arialabel="Скачать код"], [arialabel="Агент"], [gemtooltip="Скачать код"], [gemtooltip="Агент"]');
+    if (!trigger) return;
+
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+    e.preventDefault();
+
+    const hostBlock = trigger.closest('code-block') || trigger.closest('.formatted-code-block-internal-container');
+    if (!hostBlock) return;
+
+    const codeElem = hostBlock.querySelector("pre code[data-test-id='code-content']") || hostBlock.querySelector('pre code') || hostBlock.querySelector('pre');
+    const rawCode = codeElem ? codeElem.innerText.trim() : '';
+    if (!rawCode) return;
+
+    const btn = trigger.querySelector('button') || trigger;
+    btn.style.transform = 'scale(0.85)';
+    setTimeout(() => { btn.style.transform = 'none'; }, 150);
+
+    chrome.runtime.sendMessage({ action: 'EXECUTE_PAYLOAD', raw_text: rawCode });
+  }, true);
+
 function findGeminiInput() {
   return (
     document.querySelector('rich-textarea div[contenteditable="true"]') ||
@@ -101,3 +147,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     isLoopRunning = false;
   }
 });
+
+const observer = new MutationObserver(() => {
+  decorateAllButtons();
+});
+if (document.body) {
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+decorateAllButtons();

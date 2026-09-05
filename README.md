@@ -1,4 +1,7 @@
-# Vibecode Agent Bridge (Zero-Click Autonomous Loop)
+# Vibecode Agent
+
+## Интеграция с интерфейсом
+- Кнопка скачивания кода в интерфейсе Gemini переименована в **«Агент»** и перехватывается расширением для мгновенной отправки блоков кода в локальный Python-агент. Bridge (Zero-Click Autonomous Loop)
 
 Автономный агент разработки для Windows, связывающий веб-интерфейс **Google Gemini** с локальной средой выполнения (PyCharm, CLI) через Chrome Extension (Manifest V3) и локальный HTTP-сервер.
 
