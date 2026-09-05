@@ -45,7 +45,7 @@
     btn.style.transform = 'scale(0.85)';
     setTimeout(() => { btn.style.transform = 'none'; }, 150);
 
-    chrome.runtime.sendMessage({ action: 'EXECUTE_PAYLOAD', raw_text: rawCode });
+    chrome.runtime.sendMessage({ action: 'EXECUTE_PAYLOAD', raw_text: rawCode, one_shot: true });
   }, true);
 
   function findGeminiInput() {

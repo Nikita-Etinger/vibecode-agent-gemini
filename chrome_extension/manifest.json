@@ -6,8 +6,12 @@
   "permissions": [
     "contextMenus",
     "notifications",
-    "tabs"
+    "tabs",
+    "storage"
   ],
+  "action": {
+    "default_popup": "popup.html"
+  },
   "host_permissions": [
     "http://127.0.0.1:5050/*",
     "https://gemini.google.com/*"

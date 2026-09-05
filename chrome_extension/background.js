@@ -42,7 +42,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "EXECUTE_PAYLOAD" || message.action === "loop_next") {
     const text = message.raw_text || message.payload;
     const tabId = sender.tab ? sender.tab.id : null;
-    executeAgent(text, tabId);
+    const oneShot = Boolean(message.one_shot);
+    executeAgent(text, tabId, oneShot);
   }
 });
 
@@ -112,7 +113,7 @@ function extractAgentPayload(rawText) {
   return null;
 }
 
-async function executeAgent(rawText, tabId) {
+async function executeAgent(rawText, tabId, oneShot = false) {
   const payload = extractAgentPayload(rawText);
   if (!payload) {
     logToAgent("Пропуск: в сообщении не обнаружен валидный JSON-манифест агента", "DEBUG");
@@ -128,8 +129,20 @@ async function executeAgent(rawText, tabId) {
     });
     const data = await response.json();
 
-    if (data.prompt && !data.success) {
-      await sendPromptToTab(tabId, data.prompt);
+    if (oneShot) {
+      logToAgent("[One-Shot] Ручной запуск завершен. Авто-инжект в чат заблокирован.", "INFO");
+      return;
+    }
+
+    if (data.prompt && (!data.success || data.needs_reply)) {
+      chrome.storage.local.get(['autoInjectEnabled'], async (result) => {
+        const canInject = result.autoInjectEnabled !== false;
+        if (canInject) {
+          await sendPromptToTab(tabId, data.prompt);
+        } else {
+          logToAgent('[Popup] Авто-инжект заблокирован настройками пользователя.', 'INFO');
+        }
+      });
     }
   } catch (err) {
     logToAgent("executeAgent fetch сбой: " + (err.stack || err.message || err), "ERROR");

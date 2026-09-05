@@ -13,6 +13,11 @@ def test_background_js_contract():
     assert "sendPromptToTab" in content
 
 
+def test_popup_files():
+    assert Path("chrome_extension/popup.html").exists()
+    assert Path("chrome_extension/popup.js").exists()
+
+
 def test_content_js_contract():
     cnt_path = Path("chrome_extension/content.js")
     assert cnt_path.exists()
