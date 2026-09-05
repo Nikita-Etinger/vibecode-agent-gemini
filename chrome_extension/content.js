@@ -35,10 +35,19 @@ function setInputValue(element, text) {
 }
 
 function extractLatestJson() {
-  const codeBlocks = Array.from(document.querySelectorAll('pre code, pre'));
+  const responses = document.querySelectorAll('message-content, .model-response-text, [data-message-author-role="model"]');
+  if (!responses.length) return null;
+
+  const lastResponse = responses[responses.length - 1];
+  const codeBlocks = Array.from(lastResponse.querySelectorAll('pre code, pre'));
   for (let i = codeBlocks.length - 1; i >= 0; i--) {
-    const text = codeBlocks[i].innerText.trim();
+    const el = codeBlocks[i];
+    if (el.dataset.agentExecuted === "true") {
+      continue;
+    }
+    const text = el.innerText.trim();
     if (text.includes('"actions"') && text.includes('"type"')) {
+      el.dataset.agentExecuted = "true";
       return text;
     }
   }
@@ -76,7 +85,7 @@ function waitForCompletionAndSend() {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === "INJECT_AND_SUBMIT") {
+  if (msg.action === "INJECT_AND_SUBMIT" || msg.action === "inject_prompt") {
     isLoopRunning = true;
     const inputField = findGeminiInput();
     if (!inputField) {

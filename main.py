@@ -1,6 +1,8 @@
 import ast
+import hashlib
 import json
 import os
+import time
 import re
 import shutil
 import site
@@ -19,6 +21,14 @@ BTN_SECONDARY = "#555555"
 TEXT_COLOR = "#FFFFFF"
 SERVER_PORT = 5050
 
+BASE_DIR = Path(__file__).resolve().parent
+BACKUP_DIR = BASE_DIR / "backups"
+SCRIPTS_DIR = BASE_DIR / "scripts"
+LOG_FILE = BASE_DIR / "main.log"
+
+BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def validate_python_ast(filepath: Path, code: str):
     if filepath.suffix.lower() == ".py":
@@ -36,6 +46,16 @@ class AgentApp(tk.Tk):
         self.title("Local Zero-Click Agent (Port: 5050)")
         self.geometry("780x700")
         self.configure(bg=BG_MAIN)
+
+        self.last_payload_hash = None
+        self.last_payload_time = 0.0
+        self.is_busy = False
+
+        try:
+            with open(LOG_FILE, "w", encoding="utf-8") as f:
+                f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] === Лог агента инициализирован (main.log очищен) ===\n")
+        except Exception:
+            pass
 
         self._build_ui()
         self._bind_hotkeys_and_menu()
@@ -161,6 +181,13 @@ class AgentApp(tk.Tk):
         self.update()
 
     def log(self, message: str):
+        ts = time.strftime("[%Y-%m-%d %H:%M:%S]")
+        log_line = f"{ts} {message}\n"
+        try:
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(log_line)
+        except Exception:
+            pass
         self.after(0, self._append_log, message)
 
     def _append_log(self, message: str):
@@ -194,16 +221,34 @@ class AgentApp(tk.Tk):
                 self.end_headers()
 
             def do_POST(self):
-                if self.path != "/run":
+                if self.path == "/log":
+                    length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(length).decode("utf-8", errors="replace")
+                    try:
+                        log_data = json.loads(body)
+                        msg = log_data.get("message", body)
+                        lvl = log_data.get("level", "INFO")
+                        app.log(f"[EXT-BG-{lvl}] {msg}")
+                    except Exception:
+                        app.log(f"[EXT-BG] {body}")
+                    self.send_response(200)
+                    self._send_cors()
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(b'{"status":"ok"}')
+                    return
+
+                if self.path not in ("/run", "/execute"):
                     self.send_response(404)
                     self.end_headers()
                     return
 
                 length = int(self.headers.get("Content-Length", 0))
-                body = self.rfile.read(length).decode("utf-8")
+                body = self.rfile.read(length).decode("utf-8", errors="replace")
+                app.log(f"[HTTP] Входящий POST {self.path} (размер: {length} байт)")
                 try:
                     req_data = json.loads(body)
-                    raw_text = req_data.get("raw_text", "")
+                    raw_text = req_data.get("raw_text", body)
                 except Exception:
                     raw_text = body
 
@@ -211,9 +256,14 @@ class AgentApp(tk.Tk):
 
                 self.send_response(200)
                 self._send_cors()
-                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": success, "prompt": prompt}).encode("utf-8"))
+                resp_payload = {
+                    "success": success,
+                    "prompt": prompt,
+                    "needs_reply": bool(prompt)
+                }
+                self.wfile.write(json.dumps(resp_payload, ensure_ascii=False).encode("utf-8"))
 
             def log_message(self, format, *args):
                 pass
@@ -221,6 +271,7 @@ class AgentApp(tk.Tk):
         return AgentHandler
 
     def execute_task_threaded(self, raw_text: str):
+        self.log("[GUI] Ручной запуск задачи по кнопке в интерфейсе")
         self.btn_submit.config(state="disabled", text="Выполняется...")
         threading.Thread(target=lambda: self.process_payload_sync(raw_text), daemon=True).start()
 
@@ -241,8 +292,26 @@ class AgentApp(tk.Tk):
             self.after(0, lambda: self.btn_submit.config(state="normal", text="Выполнить команду"))
             return False, f"Синтаксическая ошибка в сгенерированном JSON:\n{err_msg}"
 
+        canonical_json = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+        payload_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+        now = time.time()
+        if payload_hash == self.last_payload_hash and (now - self.last_payload_time) < 30.0:
+            self.log(f"[DEDUPLICATE] Игнорирование дубля запроса (хеш: {payload_hash[:8]}, интервал: {now - self.last_payload_time:.1f}с)")
+            self.after(0, lambda: self.btn_submit.config(state="normal", text="Выполнить команду"))
+            return True, None
+
+        if self.is_busy:
+            self.log("[BUSY] Агент уже выполняет другую задачу. Запрос отклонен.")
+            self.after(0, lambda: self.btn_submit.config(state="normal", text="Выполнить команду"))
+            return False, "Агент занят выполнением предыдущей команды."
+
+        self.is_busy = True
+        self.last_payload_hash = payload_hash
+        self.last_payload_time = now
+
         last_cmd = None
         current_file = None
+        collected_reports = []
 
         try:
             summary = payload.get("summary", "Без описания")
@@ -261,16 +330,33 @@ class AgentApp(tk.Tk):
                     self._action_create(act)
                 elif atype == "delete":
                     self._action_delete(act)
-                elif atype == "command":
+                elif atype in ("command", "query"):
                     last_cmd = act.get("cmd")
-                    self._action_command(act)
+                    cmd_out = self._action_command(act)
+                    if atype == "query" or act.get("report"):
+                        collected_reports.append(f"[Команда: {last_cmd}]\n{cmd_out.strip()}")
 
             self.log("\n>>> DONE: Все действия и тесты пройдены! <<<\n")
             self.after(0, lambda: self.text_input.delete("1.0", tk.END))
             self.after(0, lambda: self.btn_submit.config(state="normal", text="Выполнить команду"))
+
+            if collected_reports:
+                reports_text = "\n\n".join(collected_reports)
+                report_prompt = (
+                    f"[System Report: {summary}]\n"
+                    f"{reports_text}\n\n"
+                    f"Все действия выполнены успешно. Проанализируй отчет и ответь пользователю ТЕКСТОМ без JSON-блоков."
+                )
+                self.log(f"  -> [ОТЧЕТ] Собран отчет по {len(collected_reports)} командам для отправки в чат.")
+                self.copy_to_clipboard_safe(report_prompt)
+                self.is_busy = False
+                return False, report_prompt
+
+            self.is_busy = False
             return True, None
 
         except Exception as err:
+            self.is_busy = False
             self.log(f"\n[ОШИБКА ИСПОЛНЕНИЯ]: {err}")
             reverse_prompt = self._build_feedback_prompt(err, last_cmd, current_file)
             self.copy_to_clipboard_safe(reverse_prompt)
@@ -298,6 +384,8 @@ class AgentApp(tk.Tk):
 
     def _action_patch(self, act: dict):
         path = Path(act["path"])
+        if not path.is_absolute():
+            path = BASE_DIR / path
         if not path.exists():
             raise FileNotFoundError(f"Файл не найден: {path}")
 
@@ -311,12 +399,17 @@ class AgentApp(tk.Tk):
         new_content = content.replace(search, replace, 1)
         validate_python_ast(path, new_content)
 
-        shutil.copyfile(path, path.with_suffix(path.suffix + ".bak"))
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        backup_file = BACKUP_DIR / f"{path.name}.bak"
+        shutil.copyfile(path, backup_file)
+
         path.write_text(new_content, encoding="utf-8")
-        self.log(f"  -> AST OK. Патч применен: {path}")
+        self.log(f"  -> AST OK. Патч применен: {path} (бэкап в {backup_file})")
 
     def _action_create(self, act: dict):
         path = Path(act["path"])
+        if not path.is_absolute():
+            path = BASE_DIR / path
         content = act["content"]
         validate_python_ast(path, content)
 
@@ -326,6 +419,8 @@ class AgentApp(tk.Tk):
 
     def _action_delete(self, act: dict):
         path = Path(act["path"])
+        if not path.is_absolute():
+            path = BASE_DIR / path
         if path.exists():
             path.unlink()
             self.log(f"  -> Удален файл: {path}")
@@ -360,9 +455,11 @@ class AgentApp(tk.Tk):
             self.log(f"  [AUTO-PIP] Ошибка установки '{pkg_name}':\n{err or out}")
             return False
 
-    def _action_command(self, act: dict):
+    def _action_command(self, act: dict) -> str:
         cmd = act["cmd"]
-        self.log(f"  -> Запуск: {cmd}")
+        cwd = act.get("cwd")
+        target_cwd = str(Path(cwd).resolve()) if cwd else str(BASE_DIR)
+        self.log(f"  -> Запуск: {cmd}" + (f" [в {target_cwd}]" if cwd else ""))
 
         env = os.environ.copy()
         py_dir = Path(sys.executable).parent
@@ -371,19 +468,39 @@ class AgentApp(tk.Tk):
         except Exception:
             user_scripts = Path(os.path.expandvars(r"%APPDATA%\Python\Python310\Scripts"))
 
-        env["PATH"] = f"{user_scripts};{py_dir / 'Scripts'};{py_dir};{env.get('PATH', '')}"
+        for root_dir in [
+            os.environ.get("ProgramFiles", "C:/Program Files"),
+            os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)"),
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs")
+        ]:
+            if root_dir and os.path.exists(root_dir):
+                try:
+                    for item in os.listdir(root_dir):
+                        if "PyCharm" in item:
+                            bin_p = os.path.join(root_dir, item, "bin")
+                            if os.path.exists(bin_p):
+                                env["PATH"] = f"{bin_p};{env.get('PATH', '')}"
+                except Exception:
+                    pass
+
+        scripts_path = str(SCRIPTS_DIR.resolve())
+        env["PYTHONPATH"] = f"{scripts_path};{str(BASE_DIR)};{env.get('PYTHONPATH', '')}"
+        env["PATH"] = f"{scripts_path};{user_scripts};{py_dir / 'Scripts'};{py_dir};{env.get('PATH', '')}"
 
         max_attempts = 3
+        last_output = ""
         for attempt in range(1, max_attempts + 1):
             res = subprocess.run(
                 cmd,
                 shell=True,
                 capture_output=True,
                 env=env,
+                cwd=target_cwd,
             )
 
             stdout_text = res.stdout.decode("cp866", errors="replace") if res.stdout else ""
             stderr_text = res.stderr.decode("cp866", errors="replace") if res.stderr else ""
+            last_output = stdout_text if stdout_text else stderr_text
 
             if res.returncode != 0:
                 combined = f"{stderr_text}\n{stdout_text}"
@@ -400,6 +517,8 @@ class AgentApp(tk.Tk):
                 error_details = stderr_text if stderr_text else stdout_text
                 raise RuntimeError(f"Команда '{cmd}' завершилась с кодом {res.returncode}.\nВывод:\n{error_details}")
             break
+
+        return last_output
 
 
 if __name__ == "__main__":
