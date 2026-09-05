@@ -128,7 +128,7 @@ async function executeAgent(rawText, tabId) {
     });
     const data = await response.json();
 
-    if (data.prompt && (!data.success || data.needs_reply)) {
+    if (data.prompt && !data.success) {
       await sendPromptToTab(tabId, data.prompt);
     }
   } catch (err) {

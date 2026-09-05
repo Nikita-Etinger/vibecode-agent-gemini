@@ -13,10 +13,10 @@ def test_background_js_contract():
     assert "sendPromptToTab" in content
 
 
-def test_content_js_deduplication_and_scope():
+def test_content_js_contract():
     cnt_path = Path("chrome_extension/content.js")
     assert cnt_path.exists()
     content = cnt_path.read_text(encoding="utf-8")
-    assert "agentExecuted" in content
-    assert "lastResponse" in content
-    assert "message-content" in content
+    assert "updateButtonAppearance" in content
+    assert "closest('code-block')" in content or 'closest("code-block")' in content
+    assert "EXECUTE_PAYLOAD" in content
