@@ -49,6 +49,7 @@ class AgentApp(tk.Tk):
 
         self.last_payload_hash = None
         self.last_payload_time = 0.0
+        self.executed_task_hashes = set()
         self.is_busy = False
 
         try:
@@ -295,7 +296,11 @@ class AgentApp(tk.Tk):
         canonical_json = json.dumps(payload, sort_keys=True, ensure_ascii=False)
         payload_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
         now = time.time()
-        if payload_hash == self.last_payload_hash and (now - self.last_payload_time) < 30.0:
+        if payload_hash in self.executed_task_hashes:
+            self.log(f"[TASK-REGISTRY] Задача уже была успешно выполнена ранее (хеш: {payload_hash[:8]}). Пропуск повторного запуска.")
+            self.after(0, lambda: self.btn_submit.config(state="normal", text="Выполнить команду"))
+            return True, None
+        if payload_hash == self.last_payload_hash and (now - self.last_payload_time) < 300.0:
             self.log(f"[DEDUPLICATE] Игнорирование дубля запроса (хеш: {payload_hash[:8]}, интервал: {now - self.last_payload_time:.1f}с)")
             self.after(0, lambda: self.btn_submit.config(state="normal", text="Выполнить команду"))
             return True, None
@@ -330,6 +335,11 @@ class AgentApp(tk.Tk):
                     self._action_create(act)
                 elif atype == "delete":
                     self._action_delete(act)
+                elif atype == "tool":
+                    tool_name = act.get("name")
+                    self.log(f"  -> Вызов инструмента: {tool_name}")
+                    cmd_out = self._action_tool(tool_name, act.get("args", {}))
+                    collected_reports.append(f"[Инструмент: {tool_name}]\n{cmd_out.strip()}")
                 elif atype in ("command", "query"):
                     last_cmd = act.get("cmd")
                     cmd_out = self._action_command(act)
@@ -337,6 +347,7 @@ class AgentApp(tk.Tk):
                         collected_reports.append(f"[Команда: {last_cmd}]\n{cmd_out.strip()}")
 
             self.log("\n>>> DONE: Все действия и тесты пройдены! <<<\n")
+            self.executed_task_hashes.add(payload_hash)
             self.after(0, lambda: self.text_input.delete("1.0", tk.END))
             self.after(0, lambda: self.btn_submit.config(state="normal", text="Выполнить команду"))
 
@@ -424,6 +435,40 @@ class AgentApp(tk.Tk):
         if path.exists():
             path.unlink()
             self.log(f"  -> Удален файл: {path}")
+
+    def _action_tool(self, name: str, kwargs: dict) -> str:
+        import importlib
+        import io
+        from contextlib import redirect_stdout, redirect_stderr
+
+        tools_dir = BASE_DIR / "tools"
+        if not (tools_dir / "__init__.py").exists():
+            tools_dir.mkdir(parents=True, exist_ok=True)
+            (tools_dir / "__init__.py").touch()
+            
+        if str(BASE_DIR) not in sys.path:
+            sys.path.insert(0, str(BASE_DIR))
+
+        try:
+            mod_name, func_name = name.rsplit(".", 1)
+            mod = importlib.import_module(f"tools.{mod_name}")
+            importlib.reload(mod)  # Горячая перезагрузка модулей
+            func = getattr(mod, func_name)
+
+            f_out = io.StringIO()
+            with redirect_stdout(f_out), redirect_stderr(f_out):
+                res = func(**kwargs)
+
+            output = f_out.getvalue()
+            if res is not None:
+                if isinstance(res, (dict, list)):
+                    output += f"\n[Return]:\n{json.dumps(res, ensure_ascii=False, indent=2)}"
+                else:
+                    output += f"\n[Return]: {res}"
+            return output
+        except Exception as e:
+            import traceback
+            raise RuntimeError(f"Ошибка инструмента '{name}': {e}\n{traceback.format_exc()}")
 
     def _try_autoinstall_missing_module(self, error_text: str, env: dict) -> bool:
         pkg_map = {

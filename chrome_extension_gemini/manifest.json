@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Local Agent Zero-Click Bridge (Gemini)",
+  "version": "1.0",
+  "description": "Автономный Zero-Click мост между Gemini и локальным Python-агентом",
+  "permissions": [
+    "contextMenus",
+    "notifications",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:5050/*",
+    "https://gemini.google.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

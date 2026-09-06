@@ -1,27 +1,12 @@
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-*.bak
-
-# Pytest & Coverage
-.pytest_cache/
-.coverage
-htmlcov/
-
-# IDE configs
+*.log
+*.rar
+*.zip
+backups/
+workspace/
 .idea/
 .vscode/
-*.sublime-workspace
-*.swp
-
-# Environments
 venv/
-.venv/
-env/
-
-# OS metadata
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-`nmain.log
+ENV/
