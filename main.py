@@ -60,7 +60,20 @@ class AgentApp(tk.Tk):
 
         self._build_ui()
         self._bind_hotkeys_and_menu()
+        self.set_status("ГОТОВ", "#2E8B57", "Ожидание задач по HTTP или через GUI")
         self._start_http_server()
+
+    def set_status(self, badge: str, color: str, text: str):
+        def _update():
+            self.status_badge.config(text=f" {badge} ", bg=color)
+            self.status_text.config(text=text)
+            if badge == "ГОТОВ":
+                self.title("[✓ Готов] Local Zero-Click Agent (Port: 5050)")
+            elif badge == "ВЫПОЛНЕНИЕ":
+                self.title(f"[⚙ {text}] Local Zero-Click Agent")
+            elif badge == "ОШИБКА":
+                self.title("[✕ Ошибка] Local Zero-Click Agent (Port: 5050)")
+        self.after(0, _update)
 
     def _build_ui(self):
         header_frame = tk.Frame(self, bg=BG_MAIN)
@@ -113,7 +126,31 @@ class AgentApp(tk.Tk):
             cursor="hand2",
             command=lambda: self.execute_task_threaded(self.text_input.get("1.0", tk.END)),
         )
-        self.btn_submit.pack(fill="x", padx=15, pady=8)
+        self.btn_submit.pack(fill="x", padx=15, pady=(8, 4))
+
+        status_frame = tk.Frame(self, bg="#202020", bd=1, relief="solid")
+        status_frame.pack(fill="x", padx=15, pady=(0, 6))
+
+        self.status_badge = tk.Label(
+            status_frame,
+            text=" ГОТОВ ",
+            bg="#2E8B57",
+            fg="#FFFFFF",
+            font=("Segoe UI", 9, "bold"),
+            padx=6,
+            pady=3
+        )
+        self.status_badge.pack(side="left")
+
+        self.status_text = tk.Label(
+            status_frame,
+            text="Ожидание задач...",
+            bg="#202020",
+            fg="#E0E0E0",
+            font=("Segoe UI", 9),
+            padx=8
+        )
+        self.status_text.pack(side="left", fill="x", expand=True, anchor="w")
 
         self.label_log = tk.Label(
             self,
@@ -322,10 +359,14 @@ class AgentApp(tk.Tk):
             summary = payload.get("summary", "Без описания")
             self.log(f"\n=== Задача: {summary} ===")
             actions = payload.get("actions", [])
+            total_acts = len(actions)
 
             for idx, act in enumerate(actions, start=1):
                 atype = act.get("type")
-                self.log(f"[{idx}/{len(actions)}] Действие: {atype}")
+                detail = act.get("path") or act.get("cmd") or act.get("name") or ""
+                step_info = f"[{idx}/{total_acts}] {atype}: {detail}"
+                self.set_status("ВЫПОЛНЕНИЕ", "#FF8C00", step_info)
+                self.log(f"[{idx}/{total_acts}] Действие: {atype}")
 
                 if atype == "patch":
                     current_file = act.get("path")
@@ -347,6 +388,7 @@ class AgentApp(tk.Tk):
                         collected_reports.append(f"[Команда: {last_cmd}]\n{cmd_out.strip()}")
 
             self.log("\n>>> DONE: Все действия и тесты пройдены! <<<\n")
+            self.set_status("ГОТОВ", "#2E8B57", f"Успешно завершено: {summary}")
             self.executed_task_hashes.add(payload_hash)
             self.after(0, lambda: self.text_input.delete("1.0", tk.END))
             self.after(0, lambda: self.btn_submit.config(state="normal", text="Выполнить команду"))
@@ -368,6 +410,7 @@ class AgentApp(tk.Tk):
 
         except Exception as err:
             self.is_busy = False
+            self.set_status("ОШИБКА", "#DC143C", str(err).splitlines()[0][:60])
             self.log(f"\n[ОШИБКА ИСПОЛНЕНИЯ]: {err}")
             reverse_prompt = self._build_feedback_prompt(err, last_cmd, current_file)
             self.copy_to_clipboard_safe(reverse_prompt)
