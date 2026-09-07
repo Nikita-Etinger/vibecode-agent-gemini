@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from tkinter import scrolledtext
@@ -44,7 +45,7 @@ def validate_python_ast(filepath: Path, code: str):
 class AgentApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Local Zero-Click Agent (Port: 5050)")
+        self.title("Local Zero-Click Agent [Nikita-Etinger] (Port: 5050)")
         self.geometry("800x720")
         self.configure(bg="#1E1E2E")
 
@@ -52,6 +53,7 @@ class AgentApp(tk.Tk):
         self.last_payload_time = 0.0
         self.executed_task_hashes = set()
         self.is_busy = False
+        self.report_on_success = tk.BooleanVar(value=True)
 
         try:
             with open(LOG_FILE, "w", encoding="utf-8") as f:
@@ -69,11 +71,11 @@ class AgentApp(tk.Tk):
             self.status_badge.config(text=f" {badge} ", bg=color)
             self.status_text.config(text=text)
             if badge == "ГОТОВ":
-                self.title("[✓ Готов] Local Zero-Click Agent (Port: 5050)")
+                self.title("[✓ Готов] Local Zero-Click Agent [Nikita-Etinger] (Port: 5050)")
             elif badge == "ВЫПОЛНЕНИЕ":
-                self.title(f"[⚙ {text}] Local Zero-Click Agent")
+                self.title(f"[⚙ {text}] Local Zero-Click Agent [Nikita-Etinger]")
             elif badge == "ОШИБКА":
-                self.title("[✕ Ошибка] Local Zero-Click Agent (Port: 5050)")
+                self.title("[✕ Ошибка] Local Zero-Click Agent [Nikita-Etinger] (Port: 5050)")
         self.after(0, _update)
 
     def _build_ui(self):
@@ -107,6 +109,22 @@ class AgentApp(tk.Tk):
             pady=4
         )
         self.btn_paste.pack(side="right")
+
+        self.chk_report = tk.Checkbutton(
+            header_frame,
+            text="Трекбек при успехе",
+            variable=self.report_on_success,
+            bg=BG_MAIN,
+            fg=TEXT_COLOR,
+            selectcolor=BG_INPUT,
+            activebackground=BG_MAIN,
+            activeforeground=TEXT_COLOR,
+            font=("Segoe UI", 9),
+            cursor="hand2",
+            highlightthickness=0,
+            bd=0
+        )
+        self.chk_report.pack(side="right", padx=(0, 14))
 
         input_card = tk.Frame(container, bg=BG_CARD, bd=0, highlightthickness=1, highlightbackground="#45475A")
         input_card.pack(fill="x", pady=(0, 10))
@@ -192,6 +210,20 @@ class AgentApp(tk.Tk):
             pady=10,
         )
         self.text_log.pack(fill="both", expand=True, padx=2, pady=2)
+
+        footer_frame = tk.Frame(container, bg=BG_MAIN)
+        footer_frame.pack(fill="x", pady=(6, 0))
+
+        self.link_github = tk.Label(
+            footer_frame,
+            text="GitHub: @Nikita-Etinger",
+            bg=BG_MAIN,
+            fg=BTN_COLOR,
+            font=("Segoe UI", 9, "underline"),
+            cursor="hand2",
+        )
+        self.link_github.pack(side="left")
+        self.link_github.bind("<Button-1>", lambda e: webbrowser.open_new_tab("https://github.com/Nikita-Etinger"))
 
     def _bind_hotkeys_and_menu(self):
         self.text_input.bind("<Key>", self._handle_ctrl_keys)
@@ -412,7 +444,12 @@ class AgentApp(tk.Tk):
             self.after(0, lambda: self.text_input.delete("1.0", tk.END))
             self.after(0, lambda: self.btn_submit.config(state="normal", text="Выполнить команду"))
 
-            if collected_reports:
+            has_inspections = any(
+                act.get("type") in ("tool", "query") or act.get("report")
+                for act in actions
+            )
+
+            if collected_reports and (has_inspections or self.report_on_success.get()):
                 reports_text = "\n\n".join(collected_reports)
                 report_prompt = (
                     f"[System Report: {summary}]\n"
@@ -423,6 +460,9 @@ class AgentApp(tk.Tk):
                 self.copy_to_clipboard_safe(report_prompt)
                 self.is_busy = False
                 return False, report_prompt
+
+            if not has_inspections and not self.report_on_success.get():
+                self.log("  -> [SILENT MODE] Свитч успехов выключен. Отчет в чат пропущен.")
 
             self.is_busy = False
             return True, None
