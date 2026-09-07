@@ -14,11 +14,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from tkinter import scrolledtext
 
-BG_MAIN = "#696969"
-BG_INPUT = "#808080"
-BTN_COLOR = "#6A5ACD"
-BTN_SECONDARY = "#555555"
-TEXT_COLOR = "#FFFFFF"
+BG_MAIN = "#1E1E2E"
+BG_CARD = "#2A2B3D"
+BG_INPUT = "#181825"
+BTN_COLOR = "#7287FD"
+BTN_SECONDARY = "#45475A"
+TEXT_COLOR = "#CDD6F4"
 SERVER_PORT = 5050
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -44,8 +45,8 @@ class AgentApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Local Zero-Click Agent (Port: 5050)")
-        self.geometry("780x700")
-        self.configure(bg=BG_MAIN)
+        self.geometry("800x720")
+        self.configure(bg="#1E1E2E")
 
         self.last_payload_hash = None
         self.last_payload_time = 0.0
@@ -76,103 +77,121 @@ class AgentApp(tk.Tk):
         self.after(0, _update)
 
     def _build_ui(self):
-        header_frame = tk.Frame(self, bg=BG_MAIN)
-        header_frame.pack(fill="x", padx=15, pady=(10, 2))
+        container = tk.Frame(self, bg=BG_MAIN)
+        container.pack(fill="both", expand=True, padx=16, pady=16)
+
+        header_frame = tk.Frame(container, bg=BG_MAIN)
+        header_frame.pack(fill="x", pady=(0, 8))
 
         self.label_input = tk.Label(
             header_frame,
-            text="JSON payload (ручной ввод или Zero-Click расширение):",
+            text="● Входящий JSON payload",
             bg=BG_MAIN,
-            fg=TEXT_COLOR,
+            fg="#A6ADC8",
             font=("Segoe UI", 10, "bold"),
         )
         self.label_input.pack(side="left")
 
         self.btn_paste = tk.Button(
             header_frame,
-            text="Вставить из буфера",
+            text=" Вставить из буфера ",
             bg=BTN_SECONDARY,
             fg=TEXT_COLOR,
             relief="flat",
+            bd=0,
             font=("Segoe UI", 9),
             cursor="hand2",
             command=self.paste_from_clipboard,
+            highlightthickness=0,
+            padx=10,
+            pady=4
         )
         self.btn_paste.pack(side="right")
 
+        input_card = tk.Frame(container, bg=BG_CARD, bd=0, highlightthickness=1, highlightbackground="#45475A")
+        input_card.pack(fill="x", pady=(0, 10))
+
         self.text_input = scrolledtext.ScrolledText(
-            self,
-            height=11,
+            input_card,
+            height=10,
             bg=BG_INPUT,
-            fg=TEXT_COLOR,
+            fg="#BAC2DE",
             insertbackground=TEXT_COLOR,
             font=("Consolas", 10),
             relief="flat",
-            padx=8,
-            pady=8,
+            bd=0,
+            padx=12,
+            pady=10,
             undo=True,
         )
-        self.text_input.pack(fill="x", padx=15, pady=5)
+        self.text_input.pack(fill="both", expand=True, padx=2, pady=2)
 
         self.btn_submit = tk.Button(
-            self,
-            text="Выполнить команду",
+            container,
+            text="▶  Выполнить команду",
             bg=BTN_COLOR,
-            fg=TEXT_COLOR,
-            activebackground="#483D8B",
-            activeforeground=TEXT_COLOR,
+            fg="#11111B",
+            activebackground="#B4BEFE",
+            activeforeground="#11111B",
             font=("Segoe UI", 11, "bold"),
             relief="flat",
+            bd=0,
             cursor="hand2",
+            highlightthickness=0,
+            pady=8,
             command=lambda: self.execute_task_threaded(self.text_input.get("1.0", tk.END)),
         )
-        self.btn_submit.pack(fill="x", padx=15, pady=(8, 4))
+        self.btn_submit.pack(fill="x", pady=(0, 10))
 
-        status_frame = tk.Frame(self, bg="#202020", bd=1, relief="solid")
-        status_frame.pack(fill="x", padx=15, pady=(0, 6))
+        status_frame = tk.Frame(container, bg=BG_CARD, bd=0, highlightthickness=1, highlightbackground="#313244")
+        status_frame.pack(fill="x", pady=(0, 10))
 
         self.status_badge = tk.Label(
             status_frame,
-            text=" ГОТОВ ",
-            bg="#2E8B57",
-            fg="#FFFFFF",
+            text="  ГОТОВ  ",
+            bg="#A6E3A1",
+            fg="#11111B",
             font=("Segoe UI", 9, "bold"),
-            padx=6,
-            pady=3
+            padx=8,
+            pady=4
         )
         self.status_badge.pack(side="left")
 
         self.status_text = tk.Label(
             status_frame,
-            text="Ожидание задач...",
-            bg="#202020",
-            fg="#E0E0E0",
+            text="Ожидание задач по HTTP или через GUI",
+            bg=BG_CARD,
+            fg="#BAC2DE",
             font=("Segoe UI", 9),
-            padx=8
+            padx=10
         )
         self.status_text.pack(side="left", fill="x", expand=True, anchor="w")
 
         self.label_log = tk.Label(
-            self,
-            text="Лог агента (с AST валидацией синтаксиса):",
+            container,
+            text="● Системный лог и AST валидация",
             bg=BG_MAIN,
-            fg=TEXT_COLOR,
+            fg="#A6ADC8",
             font=("Segoe UI", 10, "bold"),
         )
-        self.label_log.pack(anchor="w", padx=15, pady=(5, 2))
+        self.label_log.pack(anchor="w", pady=(4, 6))
+
+        log_card = tk.Frame(container, bg=BG_CARD, bd=0, highlightthickness=1, highlightbackground="#313244")
+        log_card.pack(fill="both", expand=True)
 
         self.text_log = scrolledtext.ScrolledText(
-            self,
-            height=14,
-            bg="#202020",
-            fg="#A9B7C6",
+            log_card,
+            height=13,
+            bg=BG_INPUT,
+            fg="#A6ADC8",
             font=("Consolas", 9),
             relief="flat",
+            bd=0,
             state="disabled",
-            padx=8,
-            pady=8,
+            padx=12,
+            pady=10,
         )
-        self.text_log.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        self.text_log.pack(fill="both", expand=True, padx=2, pady=2)
 
     def _bind_hotkeys_and_menu(self):
         self.text_input.bind("<Key>", self._handle_ctrl_keys)

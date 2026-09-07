@@ -9,14 +9,14 @@ let loopState = {
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
-    id: "start_agent_loop",
-    title: "Запустить Zero-Click Loop",
+    id: "start_agent_loop_zai",
+    title: "Запустить Zero-Click Loop (Z.AI)",
     contexts: ["selection"]
   });
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "start_agent_loop" && info.selectionText) {
+  if (info.menuItemId === "start_agent_loop_zai" && info.selectionText) {
     loopState.active = true;
     loopState.retries = 0;
     loopState.tabId = tab ? tab.id : null;
@@ -48,7 +48,7 @@ async function executeWithAgent(rawText) {
       chrome.notifications.create({
         type: "basic",
         iconUrl: ICON_DATA,
-        title: "Zero-Click: Успех!",
+        title: "Zero-Click (Z.AI): Успех!",
         message: "Все операции и тесты выполнены успешно."
       });
       if (loopState.tabId) {
@@ -60,8 +60,8 @@ async function executeWithAgent(rawText) {
         chrome.notifications.create({
           type: "basic",
           iconUrl: ICON_DATA,
-          title: "Zero-Click: Превышен лимит",
-          message: "Достигнут максимум итераций (5). Требуется внимание."
+          title: "Zero-Click (Z.AI): Превышен лимит",
+          message: "Достигнут максимум итераций (5). Требуется ручной разбор."
         });
         return;
       }
@@ -70,8 +70,8 @@ async function executeWithAgent(rawText) {
       chrome.notifications.create({
         type: "basic",
         iconUrl: ICON_DATA,
-        title: `Zero-Click: Ошибка (Шаг ${loopState.retries}/5)`,
-        message: "Промпт с ошибкой автоматически отправляется в Gemini..."
+        title: `Zero-Click (Z.AI): Ошибка (${loopState.retries}/5)`,
+        message: "Промпт с ошибкой отправляется в чат..."
       });
 
       if (loopState.tabId && result.prompt) {

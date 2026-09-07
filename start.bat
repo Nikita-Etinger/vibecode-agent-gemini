@@ -19,7 +19,7 @@ echo [*] Checking dependencies...
 python -m pip install -q -r requirements.txt
 
 echo [*] Starting GUI Agent and API Bridge...
-python agent_gui.py
+python main.py
 
 if %errorlevel% neq 0 (
     echo.
