@@ -6,6 +6,7 @@ __pycache__/
 *.zip
 backups/
 workspace/
+tests/
 .idea/
 .vscode/
 venv/
