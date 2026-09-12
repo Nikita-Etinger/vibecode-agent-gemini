@@ -1,51 +1,74 @@
 let isLoopRunning = false;
 let lastExecutedPayload = "";
 
-  function updateButtonAppearance(wrapper) {
-    if (wrapper.dataset.agentDecorated === 'true') return;
-    wrapper.dataset.agentDecorated = 'true';
+function injectAgentButtons() {
+  const codeBlocks = document.querySelectorAll('code-block, .formatted-code-block-internal-container');
 
-    wrapper.setAttribute('arialabel', 'Агент');
-    wrapper.setAttribute('gemtooltip', 'Агент');
+  codeBlocks.forEach((hostBlock) => {
+    const actionsContainer = hostBlock.querySelector('.code-block-actions, .actions-container, .action-buttons') ||
+                             hostBlock.querySelector('.download-button')?.parentElement ||
+                             hostBlock.querySelector('.copy-button')?.parentElement;
 
-    const btn = wrapper.querySelector('button') || wrapper;
-    btn.setAttribute('aria-label', 'Агент');
-    btn.title = 'Агент';
+    if (!actionsContainer) return;
+    if (actionsContainer.querySelector('.gemini-agent-run-btn')) return;
 
-    const icon = wrapper.querySelector('mat-icon');
-    if (icon) {
-      icon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:block;"><path d="M8 5v14l11-7z"/></svg>`;
-      icon.style.color = '#a594fd';
-    }
-  }
+    const agentBtn = document.createElement('button');
+    agentBtn.type = 'button';
+    agentBtn.className = 'gemini-agent-run-btn';
+    agentBtn.title = 'Запустить агента (Vibecode Agent)';
+    agentBtn.setAttribute('aria-label', 'Запустить агента');
 
-  function decorateAllButtons() {
-    const downloadContainers = document.querySelectorAll('.download-button, [fonticonname="arrow_circle_down"], [arialabel="Скачать код"], [gemtooltip="Скачать код"]');
-    downloadContainers.forEach(updateButtonAppearance);
-  }
+    agentBtn.style.background = 'transparent';
+    agentBtn.style.border = 'none';
+    agentBtn.style.color = '#a594fd';
+    agentBtn.style.cursor = 'pointer';
+    agentBtn.style.display = 'inline-flex';
+    agentBtn.style.alignItems = 'center';
+    agentBtn.style.justifyContent = 'center';
+    agentBtn.style.padding = '6px';
+    agentBtn.style.margin = '0 2px';
+    agentBtn.style.borderRadius = '50%';
+    agentBtn.style.transition = 'background-color 0.2s, transform 0.15s';
 
-  document.addEventListener('click', (e) => {
-    const target = e.target;
-    const trigger = target.closest('.download-button, [fonticonname="arrow_circle_down"], [arialabel="Скачать код"], [arialabel="Агент"], [gemtooltip="Скачать код"], [gemtooltip="Агент"]');
-    if (!trigger) return;
+    agentBtn.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:block;">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+    `;
 
-    e.stopImmediatePropagation();
-    e.stopPropagation();
-    e.preventDefault();
+    agentBtn.addEventListener('mouseenter', () => {
+      agentBtn.style.backgroundColor = 'rgba(165, 148, 253, 0.15)';
+    });
+    agentBtn.addEventListener('mouseleave', () => {
+      agentBtn.style.backgroundColor = 'transparent';
+    });
 
-    const hostBlock = trigger.closest('code-block') || trigger.closest('.formatted-code-block-internal-container');
-    if (!hostBlock) return;
+    agentBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
 
-    const codeElem = hostBlock.querySelector("pre code[data-test-id='code-content']") || hostBlock.querySelector('pre code') || hostBlock.querySelector('pre');
-    const rawCode = codeElem ? codeElem.innerText.trim() : '';
-    if (!rawCode) return;
+      const codeElem = hostBlock.querySelector("pre code[data-test-id='code-content']") ||
+                       hostBlock.querySelector('pre code') ||
+                       hostBlock.querySelector('pre');
+      const rawCode = codeElem ? codeElem.innerText.trim() : '';
+      if (!rawCode) {
+        console.warn('[Gemini Agent] Код не найден в блоке');
+        return;
+      }
 
-    const btn = trigger.querySelector('button') || trigger;
-    btn.style.transform = 'scale(0.85)';
-    setTimeout(() => { btn.style.transform = 'none'; }, 150);
+      agentBtn.style.transform = 'scale(0.85)';
+      setTimeout(() => { agentBtn.style.transform = 'none'; }, 150);
 
-    chrome.runtime.sendMessage({ action: 'EXECUTE_PAYLOAD', raw_text: rawCode });
-  }, true);
+      chrome.runtime.sendMessage({ action: 'EXECUTE_PAYLOAD', raw_text: rawCode });
+    });
+
+    actionsContainer.insertBefore(agentBtn, actionsContainer.firstChild);
+  });
+}
+
+function decorateAllButtons() {
+  injectAgentButtons();
+}
 
 function findGeminiInput() {
   return (
